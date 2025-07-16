@@ -145,6 +145,8 @@ async function generateVenueRecommendationsWithAI(interest: string, location: st
             role: "system",
             content: `You are a local travel expert for ${location}. Create a detailed trip plan for someone interested in ${interest}. 
 
+            ${venues.length > 0 ? `Use these real venues from our database as a starting point: ${venues.map(v => `${v.name} (${v.address})`).join(', ')}. You can mention additional places too.` : 'Use your knowledge to recommend real places.'}
+
             Use proper markdown formatting:
             - **Bold** for venue names and important highlights
             - Use bullet points (-) for features, tips, and details
@@ -196,9 +198,88 @@ async function generateVenueRecommendationsWithAI(interest: string, location: st
 }
 
 async function getPlaceRecommendations(location: string, interest: string): Promise<any[]> {
-  // This function is no longer needed since we're generating everything dynamically with AI
-  // Keeping it for compatibility but it won't be used
-  return []
+  try {
+    // Try to get real recommendations from Qloo API
+    const qloo_url = process.env.QLOO_API_URL || 'https://hackathon.api.qloo.com'
+    const qloo_key = process.env.QLOO_API_KEY
+    
+    if (!qloo_key) {
+      console.log('No Qloo API key found, using fallback')
+      return []
+    }
+
+    // Map interests to potential Qloo tags or search strategies
+    const interestMapping: { [key: string]: string[] } = {
+      'food': ['restaurant', 'dining', 'cuisine'],
+      'pizza': ['pizza', 'italian', 'restaurant'],
+      'coffee': ['coffee', 'cafe', 'espresso'],
+      'art': ['museum', 'gallery', 'art'],
+      'music': ['venue', 'concert', 'music'],
+      'shopping': ['shop', 'retail', 'store'],
+      'nightlife': ['bar', 'club', 'entertainment'],
+      'sports': ['stadium', 'arena', 'sports'],
+      'football': ['stadium', 'sports', 'football'],
+      'basketball': ['arena', 'sports', 'basketball'],
+      'history': ['museum', 'historical', 'monument'],
+      'guns': ['shooting', 'range', 'outdoor'],
+      'fitness': ['gym', 'fitness', 'health'],
+      'nature': ['park', 'outdoor', 'nature']
+    }
+
+    // Construct the API URL with location and interest-based filtering
+    const encodedLocation = encodeURIComponent(location)
+    let apiUrl = `${qloo_url}/v2/insights/?filter.type=urn:entity:place&filter.location.query=${encodedLocation}&limit=10`
+    
+    console.log('Calling Qloo API:', apiUrl)
+    
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'X-Api-Key': qloo_key,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      console.error('Qloo API error:', response.status, response.statusText)
+      const errorText = await response.text()
+      console.error('Error details:', errorText)
+      return []
+    }
+
+    const data = await response.json()
+    console.log('Qloo API response:', data)
+    
+    // Extract places from the response
+    if (data.results && data.results.entities && Array.isArray(data.results.entities)) {
+      const places = data.results.entities.slice(0, 5).map((place: any) => ({
+        name: place.name || 'Unknown Place',
+        rating: place.properties?.business_rating || place.popularity || 4.0,
+        address: place.properties?.address || place.disambiguation || '',
+        description: place.properties?.description || '',
+        id: place.entity_id || place.id,
+        category: place.properties?.category || place.subtype || '',
+        website: place.properties?.website || '',
+        phone: place.properties?.phone || '',
+        keywords: place.properties?.keywords?.map((k: any) => k.name).join(', ') || ''
+      }))
+      
+      // Filter places based on interest if we have results
+      const lowerInterest = interest.toLowerCase()
+      const relevantPlaces = places.filter((place: any) => {
+        const searchText = `${place.name} ${place.description} ${place.category} ${place.keywords}`.toLowerCase()
+        return interestMapping[lowerInterest]?.some(keyword => searchText.includes(keyword)) ||
+               searchText.includes(lowerInterest)
+      })
+      
+      return relevantPlaces.length > 0 ? relevantPlaces : places
+    }
+
+    return []
+  } catch (error) {
+    console.error('Error calling Qloo API:', error)
+    return []
+  }
 }
 
 export async function POST(request: NextRequest) {
