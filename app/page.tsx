@@ -6,6 +6,13 @@ import { useState, useRef, useEffect } from "react"
 import { Send, Plus, MessageSquare, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { marked } from "marked"
+
+// Configure marked to avoid DOM nesting issues
+marked.setOptions({
+  breaks: true,
+  gfm: true
+})
 import {
   Sidebar,
   SidebarContent,
@@ -27,12 +34,20 @@ interface Message {
   role: "user" | "assistant"
 }
 
+interface ChatState {
+  stage: 'initial' | 'preference_gathering' | 'location_selection' | 'recommendations'
+  userPreferences: string[]
+  selectedLocation: string | null
+  suggestedLocations: string[]
+}
+
 interface Chat {
   id: string
   title: string
   messages: Message[]
   createdAt: Date
   updatedAt: Date
+  chatState?: ChatState
 }
 
 export default function ChatbotInterface() {
@@ -80,16 +95,22 @@ export default function ChatbotInterface() {
   const createNewChat = () => {
     const newChat: Chat = {
       id: Date.now().toString(),
-      title: "New Chat",
+      title: "Trip Planning Chat",
       messages: [
         {
           id: "1",
-          content: "Where do you want to go?",
+          content: "What do you like?",
           role: "assistant",
         },
       ],
       createdAt: new Date(),
       updatedAt: new Date(),
+      chatState: {
+        stage: 'preference_gathering',
+        userPreferences: [],
+        selectedLocation: null,
+        suggestedLocations: []
+      }
     }
 
     setChats((prev) => [newChat, ...prev])
@@ -128,6 +149,20 @@ export default function ChatbotInterface() {
     )
   }
 
+  const updateChatState = (chatId: string, newState: ChatState) => {
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === chatId
+          ? {
+              ...chat,
+              chatState: newState,
+              updatedAt: new Date(),
+            }
+          : chat,
+      ),
+    )
+  }
+
   const currentChat = chats.find((chat) => chat.id === currentChatId)
 
   const handleSend = async () => {
@@ -150,17 +185,46 @@ export default function ChatbotInterface() {
     setInput("")
     setIsLoading(true)
 
-    // Simulate bot response
-    setTimeout(() => {
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [...(chat?.messages || []), userMessage],
+          chatState: chat?.chatState
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to get response')
+      }
+
+      const data = await response.json()
+      
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content:
-          "I'd be happy to help you plan your journey! Could you tell me more about what type of destination you're looking for?",
+        content: data.message,
         role: "assistant",
       }
+      
       addMessage(currentChatId, botMessage)
+      if (data.chatState) {
+        updateChatState(currentChatId, data.chatState)
+      }
+      
+    } catch (error) {
+      console.error('Error:', error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: "Sorry, I'm having trouble connecting right now. Please try again.",
+        role: "assistant",
+      }
+      addMessage(currentChatId, errorMessage)
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -245,7 +309,10 @@ export default function ChatbotInterface() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="prose prose-invert max-w-none">
-                        <p className="text-white leading-7 whitespace-pre-wrap">{message.content}</p>
+                        <div 
+                          className="text-white leading-7 [&>h1]:text-xl [&>h2]:text-lg [&>h3]:text-base [&>strong]:font-bold [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4 [&>li]:mb-1 [&>p]:mb-2 [&>blockquote]:border-l-4 [&>blockquote]:border-gray-400 [&>blockquote]:pl-4"
+                          dangerouslySetInnerHTML={{ __html: marked(message.content, { breaks: true }) }}
+                        />
                       </div>
                     </div>
                   </div>
