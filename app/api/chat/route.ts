@@ -46,7 +46,7 @@ async function generateAIResponse(prompt: string, interest?: string, location?: 
       ],
       model: "llama3-8b-8192",
       temperature: 0.7,
-      max_tokens: 600
+      max_tokens: 1500
     })
 
     return chatCompletion.choices[0]?.message?.content || ""
@@ -170,7 +170,7 @@ async function generateVenueRecommendationsWithAI(interest: string, location: st
         ],
         model: "llama3-8b-8192",
         temperature: 0.7,
-        max_tokens: 1000
+        max_tokens: 1500
       })
 
       const aiResponse = chatCompletion.choices[0]?.message?.content || ""
