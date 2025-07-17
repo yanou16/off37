@@ -7,6 +7,9 @@ import { Send, Plus, MessageSquare, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { marked } from "marked"
+import ExportPdfButton from "@/components/export-pdf-button"
+import InteractiveMap from "@/components/interactive-map"
+import PlaceCard from "@/components/place-card"
 
 // Configure marked to avoid DOM nesting issues
 marked.setOptions({
@@ -55,6 +58,7 @@ export default function ChatbotInterface() {
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [places, setPlaces] = useState<any[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -214,6 +218,11 @@ export default function ChatbotInterface() {
         updateChatState(currentChatId, data.chatState)
       }
       
+      // Stocker les données des lieux pour la carte
+      if (data.places && Array.isArray(data.places)) {
+        setPlaces(data.places)
+      }
+      
     } catch (error) {
       console.error('Error:', error)
       const errorMessage: Message = {
@@ -291,7 +300,14 @@ export default function ChatbotInterface() {
           <div className="flex-1">
             <h1 className="text-lg font-semibold text-white">{currentChat?.title || "Chat"}</h1>
           </div>
-          <div className="text-xs text-zinc-500 hidden md:block">Ctrl+B to toggle sidebar</div>
+          {currentChat?.chatState?.stage === 'recommendations' && (
+            <ExportPdfButton 
+              messages={currentChat.messages} 
+              chatState={currentChat.chatState}
+              places={places}
+            />
+          )}
+          <div className="text-xs text-zinc-500 hidden md:block ml-2">Ctrl+B to toggle sidebar</div>
         </header>
 
         {/* Messages */}
@@ -339,6 +355,33 @@ export default function ChatbotInterface() {
               </div>
             )}
 
+            {/* Carte interactive */}
+            {currentChat?.chatState?.stage === 'recommendations' && places.length > 0 && (
+              <div className="py-4 px-4 bg-black">
+                <div className="max-w-3xl mx-auto">
+                  <h2 className="text-xl font-semibold mb-4 text-white">Carte des lieux recommandés</h2>
+                  <InteractiveMap 
+                    location={currentChat.chatState.selectedLocation || ''} 
+                    places={places} 
+                  />
+                </div>
+              </div>
+            )}
+            
+            {/* Lieux recommandés avec images */}
+            {currentChat?.chatState?.stage === 'recommendations' && places.length > 0 && (
+              <div className="py-4 px-4 bg-black">
+                <div className="max-w-3xl mx-auto">
+                  <h2 className="text-xl font-semibold mb-4 text-white">Lieux recommandés</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {places.map((place, index) => (
+                      <PlaceCard key={place.id || index} place={place} index={index} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div ref={messagesEndRef} />
           </div>
         </div>
