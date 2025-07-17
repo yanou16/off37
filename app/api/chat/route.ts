@@ -28,7 +28,7 @@ async function generateAIResponse(prompt: string, interest?: string, location?: 
     console.log('Groq SDK not available, using fallback response')
     return ""
   }
-  
+
   try {
     const chatCompletion = await groq.chat.completions.create({
       messages: [
@@ -98,11 +98,11 @@ async function generateLocationSuggestionsWithAI(interest: string): Promise<{ lo
 
     // Extract cities from AI response - improved parsing
     const aiResponse = chatCompletion.choices[0]?.message?.content || ""
-    
+
     // Try to extract cities from the structured response
     const cityMatches = aiResponse.match(/\*\*([^*]+)\*\*/g)
     let extractedCities = ['London', 'Paris', 'New York'] // fallback
-    
+
     if (cityMatches && cityMatches.length >= 3) {
       extractedCities = cityMatches.slice(0, 3).map((match: string) => match.replace(/\*\*/g, ''))
     } else {
@@ -115,7 +115,7 @@ async function generateLocationSuggestionsWithAI(interest: string): Promise<{ lo
         }
       }
     }
-    
+
     return {
       locations: extractedCities,
       response: aiResponse
@@ -174,7 +174,7 @@ async function generateVenueRecommendationsWithAI(interest: string, location: st
       })
 
       const aiResponse = chatCompletion.choices[0]?.message?.content || ""
-      
+
       // Check if response seems incomplete (ends abruptly or doesn't have proper ending)
       if (aiResponse && (aiResponse.match(/[.!?]$/) || aiResponse.length > 800)) {
         return aiResponse
@@ -202,7 +202,7 @@ async function getPlaceRecommendations(location: string, interest: string): Prom
     // Try to get real recommendations from Qloo API
     const qloo_url = process.env.QLOO_API_URL || 'https://hackathon.api.qloo.com'
     const qloo_key = process.env.QLOO_API_KEY
-    
+
     if (!qloo_key) {
       console.log('No Qloo API key found, using fallback')
       return []
@@ -229,9 +229,9 @@ async function getPlaceRecommendations(location: string, interest: string): Prom
     // Construct the API URL with location and interest-based filtering
     const encodedLocation = encodeURIComponent(location)
     let apiUrl = `${qloo_url}/v2/insights/?filter.type=urn:entity:place&filter.location.query=${encodedLocation}&limit=10`
-    
+
     console.log('Calling Qloo API:', apiUrl)
-    
+
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
@@ -249,7 +249,7 @@ async function getPlaceRecommendations(location: string, interest: string): Prom
 
     const data = await response.json()
     console.log('Qloo API response:', data)
-    
+
     // Extract places from the response
     if (data.results && data.results.entities && Array.isArray(data.results.entities)) {
       const places = data.results.entities.slice(0, 5).map((place: any) => ({
@@ -263,15 +263,15 @@ async function getPlaceRecommendations(location: string, interest: string): Prom
         phone: place.properties?.phone || '',
         keywords: place.properties?.keywords?.map((k: any) => k.name).join(', ') || ''
       }))
-      
+
       // Filter places based on interest if we have results
       const lowerInterest = interest.toLowerCase()
       const relevantPlaces = places.filter((place: any) => {
         const searchText = `${place.name} ${place.description} ${place.category} ${place.keywords}`.toLowerCase()
         return interestMapping[lowerInterest]?.some(keyword => searchText.includes(keyword)) ||
-               searchText.includes(lowerInterest)
+          searchText.includes(lowerInterest)
       })
-      
+
       return relevantPlaces.length > 0 ? relevantPlaces : places
     }
 
@@ -282,10 +282,21 @@ async function getPlaceRecommendations(location: string, interest: string): Prom
   }
 }
 
+// PDF generation is now handled client-side with jsPDF
+
 export async function POST(request: NextRequest) {
   try {
-    const { messages, chatState } = await request.json()
-    
+    const { messages, chatState, exportPdf } = await request.json()
+
+    // PDF export is now handled client-side
+    if (exportPdf === true) {
+      return NextResponse.json(
+        { error: 'PDF export is now handled client-side' },
+        { status: 400 }
+      );
+    }
+
+    // Regular chat processing
     const lastMessage = messages[messages.length - 1]
     const currentState: ChatState = chatState || {
       stage: 'initial',
@@ -293,10 +304,10 @@ export async function POST(request: NextRequest) {
       selectedLocation: null,
       suggestedLocations: []
     }
-    
+
     let responseMessage = ""
     let newState = { ...currentState }
-    
+
     if (currentState.stage === 'initial') {
       const aiWelcome = await generateAIResponse(
         "Greet the user and ask what they like or are interested in for their trip planning. Be enthusiastic and welcoming."
@@ -306,20 +317,20 @@ export async function POST(request: NextRequest) {
     } else if (currentState.stage === 'preference_gathering') {
       const interest = lastMessage.content.toLowerCase()
       newState.userPreferences = [interest]
-      
+
       const aiSuggestions = await generateLocationSuggestionsWithAI(interest)
       newState.suggestedLocations = aiSuggestions.locations
       newState.stage = 'location_selection'
-      
+
       responseMessage = aiSuggestions.response
     } else if (currentState.stage === 'location_selection') {
       const selectedLocation = lastMessage.content.trim()
       newState.selectedLocation = selectedLocation
       newState.stage = 'recommendations'
-      
+
       const interest = currentState.userPreferences[0]
       const places = await getPlaceRecommendations(selectedLocation, interest)
-      
+
       responseMessage = await generateVenueRecommendationsWithAI(interest, selectedLocation, places)
     } else {
       const aiReset = await generateAIResponse(
@@ -333,12 +344,13 @@ export async function POST(request: NextRequest) {
         suggestedLocations: []
       }
     }
-    
+
     return NextResponse.json({
       message: responseMessage,
-      chatState: newState
+      chatState: newState,
+      canExportPdf: newState.stage === 'recommendations' // Only enable PDF export when we have recommendations
     })
-    
+
   } catch (error) {
     console.error('Chat API error:', error)
     return NextResponse.json(

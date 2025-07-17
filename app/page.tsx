@@ -7,6 +7,7 @@ import { Send, Plus, MessageSquare, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { marked } from "marked"
+import ExportPdfButton from "@/components/export-pdf-button"
 
 // Configure marked to avoid DOM nesting issues
 marked.setOptions({
@@ -291,7 +292,13 @@ export default function ChatbotInterface() {
           <div className="flex-1">
             <h1 className="text-lg font-semibold text-white">{currentChat?.title || "Chat"}</h1>
           </div>
-          <div className="text-xs text-zinc-500 hidden md:block">Ctrl+B to toggle sidebar</div>
+          {currentChat?.chatState?.stage === 'recommendations' && (
+            <ExportPdfButton 
+              messages={currentChat.messages} 
+              chatState={currentChat.chatState} 
+            />
+          )}
+          <div className="text-xs text-zinc-500 hidden md:block ml-2">Ctrl+B to toggle sidebar</div>
         </header>
 
         {/* Messages */}
