@@ -56,7 +56,10 @@ async function generateAIResponse(prompt: string, interest?: string, location?: 
   }
 }
 
-async function generateLocationSuggestionsWithAI(interest: string): Promise<{ locations: string[], response: string }> {
+async function generateLocationSuggestionsWithAI(
+  interest: string,
+  excludedLocations: string[] = []
+): Promise<{ locations: string[], response: string }> {
   if (!groq) {
     return {
       locations: ['London', 'Paris', 'New York'],
@@ -65,11 +68,16 @@ async function generateLocationSuggestionsWithAI(interest: string): Promise<{ lo
   }
 
   try {
+    const exclusionPrompt = excludedLocations.length > 0
+      ? `Do not suggest these locations as they were previously rejected: ${excludedLocations.join(', ')}. Suggest different ones.`
+      : ""
+
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         {
           role: "system",
           content: `You are a knowledgeable travel expert. Based on the user's interest, suggest 3 real cities/destinations that are genuinely known for that interest. Be specific and accurate. 
+          ${exclusionPrompt}
 
           Format your response with proper markdown formatting:
           - Use **bold** for city names and important highlights
@@ -396,14 +404,40 @@ export async function POST(request: NextRequest) {
 
       responseMessage = aiSuggestions.response
     } else if (currentState.stage === 'location_selection') {
-      const selectedLocation = lastMessage.content.trim()
-      newState.selectedLocation = selectedLocation
-      newState.stage = 'recommendations'
-
+      const userMessage = lastMessage.content.toLowerCase().trim()
       const interest = currentState.userPreferences[0]
-      placesData = await getPlaceRecommendations(selectedLocation, interest)
+      
+      // Check if user is disagreeing with location suggestions
+      const disagreementKeywords = ['no', 'dont like', 'not interested', 'disagree', 'different', 'other', 'something else', 'not good', 'hate']
+      const isDisagreeing = disagreementKeywords.some(keyword => userMessage.includes(keyword))
+      
+      if (isDisagreeing) {
+        // Acknowledge disagreement and regenerate new locations
+        console.log('User disagreed with locations; regenerating new suggestions.')
+        
+        // Generate acknowledgment response
+        const acknowledgment = await generateAIResponseIfUserDisagree(interest)
+        
+        // Regenerate new locations, excluding previous ones
+        const newSuggestions = await generateLocationSuggestionsWithAI(
+          interest,
+          currentState.suggestedLocations // Pass excluded locations
+        )
+        
+        newState.suggestedLocations = newSuggestions.locations
+        responseMessage = acknowledgment + '\n\n' + newSuggestions.response
+        
+        // Stay in location_selection to await selection
+        newState.stage = 'location_selection'
+      } else {
+        // Not disagreeing: proceed with location selection
+        const selectedLocation = lastMessage.content.trim()
+        newState.selectedLocation = selectedLocation
+        newState.stage = 'recommendations'
 
-      responseMessage = await generateVenueRecommendationsWithAI(interest, selectedLocation, placesData)
+        placesData = await getPlaceRecommendations(selectedLocation, interest)
+        responseMessage = await generateVenueRecommendationsWithAI(interest, selectedLocation, placesData)
+      }
     } else if (currentState.stage === 'recommendations') {
       // Handle user disagreement with recommendations
       const userMessage = lastMessage.content.toLowerCase()
