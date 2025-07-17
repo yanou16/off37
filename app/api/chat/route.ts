@@ -129,6 +129,40 @@ async function generateLocationSuggestionsWithAI(interest: string): Promise<{ lo
   }
 }
 
+
+async function generateAIResponseIfUserDisagree(interest: string): Promise<string> { 
+  if (!groq){ 
+    return `I understand those suggestions weren't what you were looking for. Could you tell me more about what you're interested in for your trip? What activities or experiences would you prefer?`
+  }
+  try {
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: "system", 
+          content: `You are a travel assistant. The user has disagreed with your previous recommendations for ${interest}. 
+          Politely acknowledge their disagreement and ask them to clarify their preferences or interests. 
+          Ask what specific activities, experiences, or types of places they're looking for. 
+          Be helpful and encouraging. Keep the response concise and focused on understanding their needs better.`
+        },
+        {
+          role: "user", 
+          content: `I dont like what you suggested for ${interest}, can you suggest other things ?`
+        }
+      ],
+      model: "llama3-8b-8192",
+      temperature: 0.7,
+      max_tokens: 300
+    })
+
+    return chatCompletion.choices[0]?.message?.content || `I understand those suggestions weren't what you were looking for. Could you tell me more about what you're interested in for your trip? What activities or experiences would you prefer?`
+  } catch (error) {
+    console.error('Error generating disagreement response:', error)
+    return `I understand those suggestions weren't what you were looking for. Could you tell me more about what you're interested in for your trip? What activities or experiences would you prefer?`
+  }
+}
+
+
+
 async function generateVenueRecommendationsWithAI(interest: string, location: string, venues: any[]): Promise<string> {
   if (!groq) {
     return `Here are some great places for ${interest} in ${location}:\n\n1. Popular venue in ${location}\n2. Local favorite spot\n3. Highly rated location\n4. Must-visit place\n5. Recommended by locals`
@@ -170,7 +204,7 @@ async function generateVenueRecommendationsWithAI(interest: string, location: st
         ],
         model: "llama3-8b-8192",
         temperature: 0.7,
-        max_tokens: 1500
+        max_tokens: 2000
       })
 
       const aiResponse = chatCompletion.choices[0]?.message?.content || ""
@@ -370,6 +404,35 @@ export async function POST(request: NextRequest) {
       placesData = await getPlaceRecommendations(selectedLocation, interest)
 
       responseMessage = await generateVenueRecommendationsWithAI(interest, selectedLocation, placesData)
+    } else if (currentState.stage === 'recommendations') {
+      // Handle user disagreement with recommendations
+      const userMessage = lastMessage.content.toLowerCase()
+      const interest = currentState.userPreferences[0]
+      
+      // Check if user is disagreeing with recommendations
+      const disagreementKeywords = ['no', 'dont like', 'not interested', 'disagree', 'different', 'other', 'something else', 'not good', 'hate']
+      const isDisagreeing = disagreementKeywords.some(keyword => userMessage.includes(keyword))
+      
+      if (isDisagreeing) {
+        responseMessage = await generateAIResponseIfUserDisagree(interest)
+        // Reset to preference gathering to allow them to specify new interests or preferences
+        newState.stage = 'preference_gathering'
+        newState.userPreferences = []
+        newState.selectedLocation = null
+        newState.suggestedLocations = []
+      } else {
+        // If not disagreeing, treat as new conversation
+        const aiReset = await generateAIResponse(
+          "The user wants to start a new conversation. Politely ask what they like or are interested in for their next trip."
+        )
+        responseMessage = aiReset || "What do you like?"
+        newState = {
+          stage: 'preference_gathering',
+          userPreferences: [],
+          selectedLocation: null,
+          suggestedLocations: []
+        }
+      }
     } else {
       const aiReset = await generateAIResponse(
         "The user wants to start a new conversation. Politely ask what they like or are interested in for their next trip."
