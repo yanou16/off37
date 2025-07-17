@@ -197,6 +197,39 @@ async function generateVenueRecommendationsWithAI(interest: string, location: st
   return `Here are some great places for ${interest} in ${location}:\n\n1. Popular venue in ${location}\n2. Local favorite spot\n3. Highly rated location\n4. Must-visit place\n5. Recommended by locals`
 }
 
+import { getUnsplashImages } from '@/lib/image-service';
+import { PlaceImage } from '@/types/place';
+
+// Fonction pour enrichir les lieux avec des images
+async function enrichPlacesWithImages(places: any[]): Promise<any[]> {
+  if (!places || places.length === 0) return [];
+  
+  const enrichedPlaces = [];
+  
+  for (const place of places) {
+    try {
+      // Récupérer des images depuis Unsplash
+      const images = await getUnsplashImages(
+        place.name,
+        place.address,
+        place.category
+      );
+      
+      // Ajouter les images au lieu
+      enrichedPlaces.push({
+        ...place,
+        images
+      });
+    } catch (error) {
+      console.error(`Erreur lors de l'enrichissement du lieu ${place.name} avec des images:`, error);
+      // En cas d'erreur, ajouter le lieu sans images
+      enrichedPlaces.push(place);
+    }
+  }
+  
+  return enrichedPlaces;
+}
+
 async function getPlaceRecommendations(location: string, interest: string): Promise<any[]> {
   try {
     // Try to get real recommendations from Qloo API
@@ -272,7 +305,11 @@ async function getPlaceRecommendations(location: string, interest: string): Prom
           searchText.includes(lowerInterest)
       })
 
-      return relevantPlaces.length > 0 ? relevantPlaces : places
+      // Enrichir les lieux avec des images
+      const placesToUse = relevantPlaces.length > 0 ? relevantPlaces : places;
+      const enrichedPlaces = await enrichPlacesWithImages(placesToUse);
+      
+      return enrichedPlaces;
     }
 
     return []
@@ -307,6 +344,7 @@ export async function POST(request: NextRequest) {
 
     let responseMessage = ""
     let newState = { ...currentState }
+    let placesData = []
 
     if (currentState.stage === 'initial') {
       const aiWelcome = await generateAIResponse(
@@ -329,9 +367,9 @@ export async function POST(request: NextRequest) {
       newState.stage = 'recommendations'
 
       const interest = currentState.userPreferences[0]
-      const places = await getPlaceRecommendations(selectedLocation, interest)
+      placesData = await getPlaceRecommendations(selectedLocation, interest)
 
-      responseMessage = await generateVenueRecommendationsWithAI(interest, selectedLocation, places)
+      responseMessage = await generateVenueRecommendationsWithAI(interest, selectedLocation, placesData)
     } else {
       const aiReset = await generateAIResponse(
         "The user wants to start a new conversation. Politely ask what they like or are interested in for their next trip."
@@ -348,6 +386,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       message: responseMessage,
       chatState: newState,
+      places: placesData,
       canExportPdf: newState.stage === 'recommendations' // Only enable PDF export when we have recommendations
     })
 
