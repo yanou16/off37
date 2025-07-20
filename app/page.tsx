@@ -262,7 +262,8 @@ export default function ChatbotInterface() {
         },
         body: JSON.stringify({
           messages: [...(chat?.messages || []), userMessage],
-          chatState: chat?.chatState
+          chatState: chat?.chatState,
+          tripDetails: chat?.tripDetails
         }),
       })
 

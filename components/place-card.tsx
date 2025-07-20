@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { Star, MapPin, ExternalLink, Loader } from 'lucide-react';
+import { Star, MapPin, ExternalLink, Loader, Euro } from 'lucide-react';
 import { Button } from './ui/button';
 import { PlaceImage } from '@/types/place';
 import { getUnsplashImages, getFallbackImages } from '@/lib/image-service';
@@ -13,6 +13,8 @@ interface PlaceCardProps {
     description?: string;
     category?: string;
     images?: PlaceImage[];
+    estimatedCost?: string;
+    priceLevel?: 'budget' | 'mid' | 'high';
   };
   index: number;
 }
@@ -48,6 +50,33 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, index }) => {
   // Prendre la première image comme image principale
   const mainImage = images && images.length > 0 ? images[0] : null;
   
+  // Fonction pour déterminer la couleur du badge de prix
+  const getPriceBadgeColor = (priceLevel?: string) => {
+    switch (priceLevel) {
+      case 'budget':
+        return 'bg-green-600 text-white';
+      case 'mid':
+        return 'bg-yellow-600 text-white';
+      case 'high':
+        return 'bg-red-600 text-white';
+      default:
+        return 'bg-zinc-600 text-white';
+    }
+  };
+
+  const getPriceBadgeText = (priceLevel?: string) => {
+    switch (priceLevel) {
+      case 'budget':
+        return '€';
+      case 'mid':
+        return '€€';
+      case 'high':
+        return '€€€';
+      default:
+        return '€';
+    }
+  };
+  
   return (
     <div className="border border-zinc-800 rounded-lg overflow-hidden bg-zinc-900">
       <div className="relative aspect-video">
@@ -70,12 +99,19 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, index }) => {
         <div className="absolute top-2 left-2 bg-black bg-opacity-70 rounded-full w-8 h-8 flex items-center justify-center text-white font-bold">
           {index + 1}
         </div>
-        {place.rating && (
-          <div className="absolute top-2 right-2 bg-black bg-opacity-70 rounded-md px-2 py-1 flex items-center">
-            <Star className="h-3 w-3 text-yellow-400 mr-1" />
-            <span className="text-white text-xs font-medium">{place.rating}</span>
-          </div>
-        )}
+        <div className="absolute top-2 right-2 flex gap-2">
+          {place.priceLevel && (
+            <div className={`rounded-md px-2 py-1 text-xs font-medium ${getPriceBadgeColor(place.priceLevel)}`}>
+              {getPriceBadgeText(place.priceLevel)}
+            </div>
+          )}
+          {place.rating && (
+            <div className="bg-black bg-opacity-70 rounded-md px-2 py-1 flex items-center">
+              <Star className="h-3 w-3 text-yellow-400 mr-1" />
+              <span className="text-white text-xs font-medium">{place.rating}</span>
+            </div>
+          )}
+        </div>
       </div>
       
       <div className="p-4">
@@ -92,6 +128,16 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, index }) => {
               ? `${place.description.substring(0, 100)}...` 
               : place.description}
           </p>
+        )}
+        
+        {/* Coût estimé */}
+        {place.estimatedCost && (
+          <div className="flex items-center gap-2 mb-3 p-2 bg-zinc-800 rounded-md">
+            <Euro className="h-4 w-4 text-green-400" />
+            <span className="text-sm text-green-400 font-medium">
+              {place.estimatedCost}
+            </span>
+          </div>
         )}
         
         {/* Miniatures des images supplémentaires */}
