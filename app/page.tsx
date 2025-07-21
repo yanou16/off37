@@ -44,6 +44,12 @@ interface ChatState {
   suggestedLocations: string[]
 }
 
+interface TripDetails {
+  budget: number | null
+  startDate: string
+  endDate: string
+}
+
 interface Chat {
   id: string
   title: string
@@ -51,6 +57,7 @@ interface Chat {
   createdAt: Date
   updatedAt: Date
   chatState?: ChatState
+  tripDetails?: TripDetails
 }
 
 export default function ChatbotInterface() {
@@ -59,25 +66,52 @@ export default function ChatbotInterface() {
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [places, setPlaces] = useState<any[]>([])
+  const [showTripModal, setShowTripModal] = useState(false)
+  const [pendingChatId, setPendingChatId] = useState<string | null>(null)
+  const [initializedChats, setInitializedChats] = useState<Set<string>>(new Set())
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Load chats from localStorage on mount
+  // Load chats and initialized chat IDs from localStorage on mount
   useEffect(() => {
     const savedChats = localStorage.getItem("chatbot-chats")
+    const savedInitializedChats = localStorage.getItem("chatbot-initialized-chats")
+    
+    let initializedSet = new Set<string>()
+    
+    // Load initialized chat IDs
+    if (savedInitializedChats) {
+      try {
+        const parsedInitialized = JSON.parse(savedInitializedChats)
+        initializedSet = new Set(parsedInitialized)
+      } catch (error) {
+        console.error('Error parsing initialized chats:', error)
+      }
+    }
+    
     if (savedChats) {
       const parsedChats = JSON.parse(savedChats).map((chat: any) => ({
         ...chat,
         createdAt: new Date(chat.createdAt),
         updatedAt: new Date(chat.updatedAt),
       }))
+      
+      // Mark all existing chats as initialized (they already exist, so no modal needed)
+      const existingChatIds = parsedChats.map((chat: Chat) => chat.id)
+      existingChatIds.forEach(id => initializedSet.add(id))
+      
       setChats(parsedChats)
+      setInitializedChats(initializedSet)
+      
       if (parsedChats.length > 0) {
         setCurrentChatId(parsedChats[0].id)
       }
     } else {
-      // Create initial chat if none exists
-      createNewChat()
+      // No existing chats, create initial one
+      setInitializedChats(initializedSet)
+      const initialChatId = Date.now().toString()
+      setPendingChatId(initialChatId)
+      setShowTripModal(true)
     }
   }, [])
 
@@ -88,6 +122,11 @@ export default function ChatbotInterface() {
     }
   }, [chats])
 
+  // Save initialized chats to localStorage whenever initializedChats changes
+  useEffect(() => {
+    localStorage.setItem("chatbot-initialized-chats", JSON.stringify(Array.from(initializedChats)))
+  }, [initializedChats])
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
@@ -97,8 +136,16 @@ export default function ChatbotInterface() {
   }, [chats, currentChatId])
 
   const createNewChat = () => {
+    const newChatId = Date.now().toString()
+    setPendingChatId(newChatId)
+    setShowTripModal(true)
+  }
+
+  const handleTripDetailsSubmit = (tripDetails: TripDetails) => {
+    if (!pendingChatId) return
+
     const newChat: Chat = {
-      id: Date.now().toString(),
+      id: pendingChatId,
       title: "Trip Planning Chat",
       messages: [
         {
@@ -114,14 +161,32 @@ export default function ChatbotInterface() {
         userPreferences: [],
         selectedLocation: null,
         suggestedLocations: []
-      }
+      },
+      tripDetails
     }
 
+    // Mark this chat as initialized
+    setInitializedChats(prev => new Set([...prev, pendingChatId]))
+    
     setChats((prev) => [newChat, ...prev])
     setCurrentChatId(newChat.id)
+    setShowTripModal(false)
+    setPendingChatId(null)
+  }
+
+  const handleModalClose = () => {
+    setShowTripModal(false)
+    setPendingChatId(null)
   }
 
   const deleteChat = (chatId: string) => {
+    // Remove from initialized chats tracking
+    setInitializedChats(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(chatId)
+      return newSet
+    })
+    
     setChats((prev) => {
       const filtered = prev.filter((chat) => chat.id !== chatId)
       if (currentChatId === chatId && filtered.length > 0) {
@@ -197,7 +262,8 @@ export default function ChatbotInterface() {
         },
         body: JSON.stringify({
           messages: [...(chat?.messages || []), userMessage],
-          chatState: chat?.chatState
+          chatState: chat?.chatState,
+          tripDetails: chat?.tripDetails
         }),
       })
 
@@ -241,6 +307,138 @@ export default function ChatbotInterface() {
       e.preventDefault()
       handleSend()
     }
+  }
+
+  // Trip Planning Modal Component
+  const TripPlanningModal = () => {
+    const [budget, setBudget] = useState<number | null>(null)
+    const [startDate, setStartDate] = useState("")
+    const [endDate, setEndDate] = useState("")
+
+    const handleSubmit = (e: React.FormEvent) => {
+      e.preventDefault()
+      handleTripDetailsSubmit({
+        budget,
+        startDate,
+        endDate
+      })
+    }
+
+    const isFormValid = startDate && endDate && new Date(startDate) <= new Date(endDate)
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-zinc-900 rounded-lg p-6 w-full max-w-md border border-zinc-700">
+          <h2 className="text-xl font-semibold text-white mb-6">Plan Your Trip</h2>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="budget" className="block text-sm font-medium text-zinc-300 mb-2">
+                Budget (€)
+              </label>
+              <input
+                type="number"
+                id="budget"
+                value={budget || ""}
+                onChange={(e) => setBudget(e.target.value ? Number(e.target.value) : null)}
+                placeholder="Enter your budget"
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-600 rounded-md text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                min="0"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="startDate" className="block text-sm font-medium text-zinc-300 mb-2">
+                Start Date
+              </label>
+              <input
+                type="date"
+                id="startDate"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="endDate" className="block text-sm font-medium text-zinc-300 mb-2">
+                End Date
+              </label>
+              <input
+                type="date"
+                id="endDate"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+                min={startDate}
+              />
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <Button
+                type="button"
+                onClick={handleModalClose}
+                variant="outline"
+                className="flex-1 border-zinc-600 text-zinc-300 hover:bg-zinc-800"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={!isFormValid}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white disabled:bg-zinc-700 disabled:text-zinc-400"
+              >
+                Confirm and Start Chat
+              </Button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
+  // Trip Summary Component
+  const TripSummary = ({ tripDetails }: { tripDetails: TripDetails }) => {
+    const formatDate = (dateString: string) => {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      })
+    }
+
+    const calculateDays = () => {
+      const start = new Date(tripDetails.startDate)
+      const end = new Date(tripDetails.endDate)
+      const diffTime = Math.abs(end.getTime() - start.getTime())
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      return diffDays
+    }
+
+    return (
+      <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4 mb-4">
+        <div className="flex flex-wrap gap-4 text-sm">
+          {tripDetails.budget && (
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-400">Budget:</span>
+              <span className="text-white font-medium">€{tripDetails.budget.toLocaleString()}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <span className="text-zinc-400">Dates:</span>
+            <span className="text-white font-medium">
+              {formatDate(tripDetails.startDate)} - {formatDate(tripDetails.endDate)}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-zinc-400">Duration:</span>
+            <span className="text-white font-medium">{calculateDays()} days</span>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -313,6 +511,12 @@ export default function ChatbotInterface() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto">
+            {/* Trip Summary */}
+            {currentChat?.tripDetails && (
+              <div className="px-4 pt-4">
+                <TripSummary tripDetails={currentChat.tripDetails} />
+              </div>
+            )}
             {currentChat?.messages.map((message) => (
               <div
                 key={message.id}
@@ -411,6 +615,9 @@ export default function ChatbotInterface() {
           </div>
         </div>
       </SidebarInset>
+
+      {/* Trip Planning Modal */}
+      {showTripModal && <TripPlanningModal />}
     </SidebarProvider>
   )
 }

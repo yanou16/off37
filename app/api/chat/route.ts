@@ -294,7 +294,7 @@ async function generateAIResponseIfUserDisagree(interest: string): Promise<strin
 
 
 
-async function generateVenueRecommendationsWithAI(interest: string, location: string, venues: any[]): Promise<string> {
+async function generateVenueRecommendationsWithAI(interest: string, location: string, venues: any[], budgetPerDay?: number): Promise<string> {
   if (!groq) {
     return `Here are some great places for ${interest} in ${location}:\n\n1. Popular venue in ${location}\n2. Local favorite spot\n3. Highly rated location\n4. Must-visit place\n5. Recommended by locals`
   }
@@ -303,6 +303,11 @@ async function generateVenueRecommendationsWithAI(interest: string, location: st
   if (venues.length === 0) {
     return `I couldn't find specific venue details for ${interest} in ${location} right now. Would you like suggestions for a different location or more details on your preferences?`
   }
+
+  // Budget context for the LLM
+  const budgetContext = budgetPerDay 
+    ? `Budget: €${budgetPerDay}/day. Recommend a smart mix of budget-friendly and mid-range options. Include estimated costs (€) for each place.`
+    : 'Include estimated costs (€) for each place when possible.'
 
   let attempts = 0
   const maxAttempts = 2
@@ -317,17 +322,21 @@ async function generateVenueRecommendationsWithAI(interest: string, location: st
 
             ${venues.length > 0 ? `MUST use these real venues as the basis: ${venues.map(v => `${v.name} (${v.address})`).join(', ')}. Expand with genuine details but stay accurate.` : 'Use your knowledge to recommend real places, but keep it focused.'}
 
+            ${budgetContext}
+
             Use proper markdown formatting:
             - **Bold** for venue names and important highlights
             - Use bullet points (-) for features, tips, and details
             - Clear numbering (1., 2., 3., etc.) for the main venues
             - Line breaks for better readability
+            - Include **💰 Cost:** for each venue (e.g., "💰 Cost: €15-25 per person")
 
             Include:
             1. Top 5 real, specific venues/places in ${location} for ${interest}
             2. Brief description of each place with key features
-            3. Practical tips or recommendations using bullet points
-            4. Best times to visit
+            3. Estimated costs per person
+            4. Practical tips or recommendations using bullet points
+            5. Best times to visit
 
             Be specific with real place names, addresses when possible, and genuine local knowledge. Format as a well-structured numbered list with descriptions using markdown formatting. Stay on-topic—no hallucinations.
 
@@ -335,7 +344,7 @@ async function generateVenueRecommendationsWithAI(interest: string, location: st
           },
           {
             role: "user",
-            content: `I'm interested in ${interest} and I'm going to ${location}. Give me a detailed trip plan with the top 5 real places I should visit, including specific venues, attractions, or experiences.`
+            content: `I'm interested in ${interest} and I'm going to ${location}. Give me a detailed trip plan with the top 5 real places I should visit, including specific venues, attractions, or experiences. ${budgetPerDay ? `My daily budget is €${budgetPerDay}.` : ''}`
           }
         ],
         model: "llama3-8b-8192",
@@ -370,7 +379,7 @@ async function generateVenueRecommendationsWithAI(interest: string, location: st
 import { getUnsplashImages } from '@/lib/image-service';
 import { PlaceImage } from '@/types/place';
 
-// Fonction pour enrichir les lieux avec des images
+// Fonction pour enrichir les lieux avec des images et des informations de prix
 async function enrichPlacesWithImages(places: any[]): Promise<any[]> {
   if (!places || places.length === 0) return [];
   
@@ -398,6 +407,44 @@ async function enrichPlacesWithImages(places: any[]): Promise<any[]> {
   }
   
   return enrichedPlaces;
+}
+
+// Fonction pour extraire les informations de prix depuis la réponse LLM et enrichir les lieux
+function enrichPlacesWithPricing(places: any[], aiResponse: string): any[] {
+  if (!places || places.length === 0) return [];
+  
+  // Regex pour extraire les coûts (€15-25, €10, Cost: €20-30, etc.)
+  const costRegex = /💰\s*Cost:\s*(€[\d\-€\s,]+)/gi;
+  const costs = [];
+  let match;
+  
+  while ((match = costRegex.exec(aiResponse)) !== null) {
+    costs.push(match[1].trim());
+  }
+  
+  // Fonction pour déterminer le niveau de prix basé sur le coût
+  const getPriceLevel = (cost: string): 'budget' | 'mid' | 'high' => {
+    const numbers = cost.match(/\d+/g);
+    if (!numbers) return 'mid';
+    
+    const avgPrice = numbers.reduce((sum, num) => sum + parseInt(num), 0) / numbers.length;
+    
+    if (avgPrice <= 20) return 'budget';
+    if (avgPrice <= 50) return 'mid';
+    return 'high';
+  };
+  
+  // Enrichir chaque lieu avec les informations de prix
+  return places.map((place, index) => {
+    const estimatedCost = costs[index] || null;
+    const priceLevel = estimatedCost ? getPriceLevel(estimatedCost) : undefined;
+    
+    return {
+      ...place,
+      estimatedCost,
+      priceLevel
+    };
+  });
 }
 
 async function getPlaceRecommendations(location: string, interest: string): Promise<any[]> {
@@ -512,7 +559,7 @@ async function getPlaceRecommendations(location: string, interest: string): Prom
 
 export async function POST(request: NextRequest) {
   try {
-    const { messages, chatState, exportPdf } = await request.json()
+    const { messages, chatState, exportPdf, tripDetails } = await request.json()
 
     // PDF export is now handled client-side
     if (exportPdf === true) {
@@ -596,7 +643,22 @@ export async function POST(request: NextRequest) {
           newState.stage = 'recommendations'
 
           placesData = await getPlaceRecommendations(extractedLoc, interest)
-          responseMessage = await generateVenueRecommendationsWithAI(interest, extractedLoc, placesData)
+          
+          // Calculate budget per day from trip details
+          let budgetPerDay: number | undefined
+          
+          if (tripDetails?.budget && tripDetails?.startDate && tripDetails?.endDate) {
+            const startDate = new Date(tripDetails.startDate)
+            const endDate = new Date(tripDetails.endDate)
+            const diffTime = Math.abs(endDate.getTime() - startDate.getTime())
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+            budgetPerDay = Math.round(tripDetails.budget / diffDays)
+          }
+          
+          responseMessage = await generateVenueRecommendationsWithAI(interest, extractedLoc, placesData, budgetPerDay)
+          
+          // Enrichir les lieux avec les informations de prix extraites de la réponse LLM
+          placesData = enrichPlacesWithPricing(placesData, responseMessage)
 
           // If response indicates Qloo fallback (starts with "I couldn't find"), reset stage to location_selection
           if (responseMessage.startsWith("I couldn't find")) {
