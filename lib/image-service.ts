@@ -59,7 +59,7 @@ export async function getUnsplashImages(placeName: string, location: string, cat
     // Si aucune image n'est trouvée, utiliser les images de secours
     return getFallbackImages(category);
   } catch (error) {
-    console.error('Erreur lors de la récupération des images Unsplash:', error);
+    console.error('🖼️  Unsplash API error, using fallback images:', error);
     return getFallbackImages(category);
   }
 }

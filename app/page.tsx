@@ -255,6 +255,7 @@ export default function ChatbotInterface() {
     setIsLoading(true)
 
     try {
+      // Revenir à l'API principale
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -315,8 +316,28 @@ export default function ChatbotInterface() {
     const [startDate, setStartDate] = useState("")
     const [endDate, setEndDate] = useState("")
 
+    // Get today's date in YYYY-MM-DD format for validation
+    const today = new Date().toISOString().split('T')[0]
+
     const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault()
+      
+      // Additional validation before submit
+      if (!budget || budget <= 0) {
+        alert("Veuillez entrer un budget valide supérieur à 0€")
+        return
+      }
+      
+      if (new Date(startDate) < new Date(today)) {
+        alert("La date de début ne peut pas être dans le passé")
+        return
+      }
+      
+      if (new Date(endDate) < new Date(startDate)) {
+        alert("La date de fin doit être après la date de début")
+        return
+      }
+      
       handleTripDetailsSubmit({
         budget,
         startDate,
@@ -324,7 +345,9 @@ export default function ChatbotInterface() {
       })
     }
 
-    const isFormValid = startDate && endDate && new Date(startDate) <= new Date(endDate)
+    const isFormValid = budget && budget > 0 && startDate && endDate && 
+                       new Date(startDate) >= new Date(today) && 
+                       new Date(startDate) <= new Date(endDate)
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -358,6 +381,7 @@ export default function ChatbotInterface() {
                 onChange={(e) => setStartDate(e.target.value)}
                 className="w-full px-3 py-2 bg-zinc-800 border border-zinc-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
+                min={today}
               />
             </div>
 
@@ -372,7 +396,7 @@ export default function ChatbotInterface() {
                 onChange={(e) => setEndDate(e.target.value)}
                 className="w-full px-3 py-2 bg-zinc-800 border border-zinc-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
-                min={startDate}
+                min={startDate || today}
               />
             </div>
 
