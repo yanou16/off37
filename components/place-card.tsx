@@ -37,7 +37,7 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, index }) => {
           setImages(fetchedImages);
         } catch (error) {
           console.error('Erreur lors du chargement des images:', error);
-          setImages(getFallbackImages(place.category));
+          setImages(getFallbackImages(place.category, place.name));
         } finally {
           setLoading(false);
         }
