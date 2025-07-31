@@ -10,6 +10,7 @@ import { marked } from "marked"
 import ExportPdfButton from "@/components/export-pdf-button"
 import InteractiveMap from "@/components/interactive-map"
 import PlaceCard from "@/components/place-card"
+import Navbar from "@/components/navbar"
 
 // Configure marked to avoid DOM nesting issues
 marked.setOptions({
@@ -76,9 +77,9 @@ export default function ChatbotInterface() {
   useEffect(() => {
     const savedChats = localStorage.getItem("chatbot-chats")
     const savedInitializedChats = localStorage.getItem("chatbot-initialized-chats")
-    
+
     let initializedSet = new Set<string>()
-    
+
     // Load initialized chat IDs
     if (savedInitializedChats) {
       try {
@@ -88,21 +89,21 @@ export default function ChatbotInterface() {
         console.error('Error parsing initialized chats:', error)
       }
     }
-    
+
     if (savedChats) {
       const parsedChats = JSON.parse(savedChats).map((chat: any) => ({
         ...chat,
         createdAt: new Date(chat.createdAt),
         updatedAt: new Date(chat.updatedAt),
       }))
-      
+
       // Mark all existing chats as initialized (they already exist, so no modal needed)
       const existingChatIds = parsedChats.map((chat: Chat) => chat.id)
-      existingChatIds.forEach(id => initializedSet.add(id))
-      
+      existingChatIds.forEach((id: string) => initializedSet.add(id))
+
       setChats(parsedChats)
       setInitializedChats(initializedSet)
-      
+
       if (parsedChats.length > 0) {
         setCurrentChatId(parsedChats[0].id)
       }
@@ -167,7 +168,7 @@ export default function ChatbotInterface() {
 
     // Mark this chat as initialized
     setInitializedChats(prev => new Set([...prev, pendingChatId]))
-    
+
     setChats((prev) => [newChat, ...prev])
     setCurrentChatId(newChat.id)
     setShowTripModal(false)
@@ -186,7 +187,7 @@ export default function ChatbotInterface() {
       newSet.delete(chatId)
       return newSet
     })
-    
+
     setChats((prev) => {
       const filtered = prev.filter((chat) => chat.id !== chatId)
       if (currentChatId === chatId && filtered.length > 0) {
@@ -209,10 +210,10 @@ export default function ChatbotInterface() {
       prev.map((chat) =>
         chat.id === chatId
           ? {
-              ...chat,
-              messages: [...chat.messages, message],
-              updatedAt: new Date(),
-            }
+            ...chat,
+            messages: [...chat.messages, message],
+            updatedAt: new Date(),
+          }
           : chat,
       ),
     )
@@ -223,10 +224,10 @@ export default function ChatbotInterface() {
       prev.map((chat) =>
         chat.id === chatId
           ? {
-              ...chat,
-              chatState: newState,
-              updatedAt: new Date(),
-            }
+            ...chat,
+            chatState: newState,
+            updatedAt: new Date(),
+          }
           : chat,
       ),
     )
@@ -273,23 +274,23 @@ export default function ChatbotInterface() {
       }
 
       const data = await response.json()
-      
+
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: data.message,
         role: "assistant",
       }
-      
+
       addMessage(currentChatId, botMessage)
       if (data.chatState) {
         updateChatState(currentChatId, data.chatState)
       }
-      
+
       // Stocker les données des lieux pour la carte
       if (data.places && Array.isArray(data.places)) {
         setPlaces(data.places)
       }
-      
+
     } catch (error) {
       console.error('Error:', error)
       const errorMessage: Message = {
@@ -321,23 +322,23 @@ export default function ChatbotInterface() {
 
     const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault()
-      
+
       // Additional validation before submit
       if (!budget || budget <= 0) {
         alert("Veuillez entrer un budget valide supérieur à 0€")
         return
       }
-      
+
       if (new Date(startDate) < new Date(today)) {
         alert("La date de début ne peut pas être dans le passé")
         return
       }
-      
+
       if (new Date(endDate) < new Date(startDate)) {
         alert("La date de fin doit être après la date de début")
         return
       }
-      
+
       handleTripDetailsSubmit({
         budget,
         startDate,
@@ -345,15 +346,15 @@ export default function ChatbotInterface() {
       })
     }
 
-    const isFormValid = budget && budget > 0 && startDate && endDate && 
-                       new Date(startDate) >= new Date(today) && 
-                       new Date(startDate) <= new Date(endDate)
+    const isFormValid = budget && budget > 0 && startDate && endDate &&
+      new Date(startDate) >= new Date(today) &&
+      new Date(startDate) <= new Date(endDate)
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div className="bg-zinc-900 rounded-lg p-6 w-full max-w-md border border-zinc-700">
           <h2 className="text-xl font-semibold text-white mb-6">Plan Your Trip</h2>
-          
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="budget" className="block text-sm font-medium text-zinc-300 mb-2">
@@ -466,56 +467,60 @@ export default function ChatbotInterface() {
   }
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <Sidebar className="border-r border-zinc-800" collapsible="offcanvas" variant="sidebar">
-        <SidebarHeader className="p-4">
-          <Button
-            onClick={createNewChat}
-            className="w-full justify-start gap-2 bg-zinc-900 hover:bg-zinc-800 text-white border-zinc-700"
-            variant="outline"
-          >
-            <Plus className="h-4 w-4" />
-            New Chat
-          </Button>
-        </SidebarHeader>
+    <div className="min-h-screen bg-black">
+      <Navbar />
+      <div className="h-[calc(100vh-64px)]">
+        <SidebarProvider defaultOpen={true}>
+          <Sidebar className="border-r border-zinc-800" collapsible="offcanvas" variant="sidebar">
+            <SidebarContent className="flex flex-col h-full">
+              <SidebarGroup className="flex-1">
+                <SidebarGroupLabel className="text-zinc-400">Recent Chats</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {chats.map((chat) => (
+                      <SidebarMenuItem key={chat.id}>
+                        <SidebarMenuButton
+                          onClick={() => setCurrentChatId(chat.id)}
+                          isActive={currentChatId === chat.id}
+                          className="group justify-between text-zinc-300 hover:text-white hover:bg-zinc-800 data-[active=true]:bg-zinc-800 data-[active=true]:text-white"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                            <span className="truncate text-sm">{chat.title}</span>
+                          </div>
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              deleteChat(chat.id)
+                            }}
+                            variant="ghost"
+                            size="sm"
+                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 hover:bg-zinc-700 text-zinc-400 hover:text-red-400"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+              
+              {/* New Chat Button at Bottom */}
+              <div className="p-4 border-t border-zinc-800">
+                <Button
+                  onClick={createNewChat}
+                  className="w-full justify-start gap-2 bg-zinc-900 hover:bg-zinc-800 text-white border-zinc-700"
+                  variant="outline"
+                >
+                  <Plus className="h-4 w-4" />
+                  New Chat
+                </Button>
+              </div>
+            </SidebarContent>
+          </Sidebar>
 
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel className="text-zinc-400">Recent Chats</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {chats.map((chat) => (
-                  <SidebarMenuItem key={chat.id}>
-                    <SidebarMenuButton
-                      onClick={() => setCurrentChatId(chat.id)}
-                      isActive={currentChatId === chat.id}
-                      className="group justify-between text-zinc-300 hover:text-white hover:bg-zinc-800 data-[active=true]:bg-zinc-800 data-[active=true]:text-white"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <MessageSquare className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate text-sm">{chat.title}</span>
-                      </div>
-                      <Button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          deleteChat(chat.id)
-                        }}
-                        variant="ghost"
-                        size="sm"
-                        className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 hover:bg-zinc-700 text-zinc-400 hover:text-red-400"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-      </Sidebar>
-
-      <SidebarInset className="flex flex-col h-screen bg-black text-white">
+            <SidebarInset className="flex flex-col h-full bg-black text-white">
         {/* Header */}
         <header className="flex h-14 items-center gap-2 border-b border-zinc-800 px-4">
           <SidebarTrigger className="text-white hover:bg-zinc-800 -ml-1" />
@@ -523,8 +528,8 @@ export default function ChatbotInterface() {
             <h1 className="text-lg font-semibold text-white">{currentChat?.title || "Chat"}</h1>
           </div>
           {currentChat?.chatState?.stage === 'recommendations' && (
-            <ExportPdfButton 
-              messages={currentChat.messages} 
+            <ExportPdfButton
+              messages={currentChat.messages}
               chatState={currentChat.chatState}
               places={places}
             />
@@ -553,9 +558,9 @@ export default function ChatbotInterface() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="prose prose-invert max-w-none">
-                        <div 
+                        <div
                           className="text-white leading-7 [&>h1]:text-xl [&>h2]:text-lg [&>h3]:text-base [&>strong]:font-bold [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4 [&>li]:mb-1 [&>p]:mb-2 [&>blockquote]:border-l-4 [&>blockquote]:border-gray-400 [&>blockquote]:pl-4"
-                          dangerouslySetInnerHTML={{ __html: marked(message.content, { breaks: true }) }}
+                          dangerouslySetInnerHTML={{ __html: marked(message.content, { breaks: true }) as string }}
                         />
                       </div>
                     </div>
@@ -588,14 +593,14 @@ export default function ChatbotInterface() {
               <div className="py-4 px-4 bg-black">
                 <div className="max-w-3xl mx-auto">
                   <h2 className="text-xl font-semibold mb-4 text-white">Carte des lieux recommandés</h2>
-                  <InteractiveMap 
-                    location={currentChat.chatState.selectedLocation || ''} 
-                    places={places} 
+                  <InteractiveMap
+                    location={currentChat.chatState.selectedLocation || ''}
+                    places={places}
                   />
                 </div>
               </div>
             )}
-            
+
             {/* Lieux recommandés avec images */}
             {currentChat?.chatState?.stage === 'recommendations' && places.length > 0 && (
               <div className="py-4 px-4 bg-black">
@@ -609,7 +614,7 @@ export default function ChatbotInterface() {
                 </div>
               </div>
             )}
-            
+
             <div ref={messagesEndRef} />
           </div>
         </div>
@@ -640,8 +645,10 @@ export default function ChatbotInterface() {
         </div>
       </SidebarInset>
 
-      {/* Trip Planning Modal */}
-      {showTripModal && <TripPlanningModal />}
-    </SidebarProvider>
+          {/* Trip Planning Modal */}
+          {showTripModal && <TripPlanningModal />}
+        </SidebarProvider>
+      </div>
+    </div>
   )
 }
