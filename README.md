@@ -193,10 +193,9 @@ Result: Artisanal chocolatiers, workshops, and cultural experiences
 
 ## 👥 Team
 
-- **[Your Name]** - Full-Stack Developer & AI Integration Specialist
-- **Project Duration**: 48 hours (Hackathon)
-- **Lines of Code**: 2,500+
-- **API Integrations**: 4 major services
+-Lozazna Rayan, Rami Mohamed Amine & Sidali Hallaoua – Full-Stack Developers & AI Enthusiasts
+-Project Duration: 48 hours (Hackathon Challenge)
+-Lines of Code: 2,500+ | APIs Integrated: 4 major services
 
 ## 📄 License
 
