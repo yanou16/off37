@@ -185,23 +185,19 @@ Result: Artisanal chocolatiers, workshops, and cultural experiences
 - API for third-party integration
 - Analytics dashboard
 
-## 🏅 Awards & Recognition
 
-- **Best Use of AI in Travel** - [Hackathon Name]
-- **Most Innovative Integration** - Qloo API Challenge
-- **People's Choice Award** - Community Voting
 
 ## 👥 Team
 
 -Lozazna Rayan, Rami Mohamed Amine & Sidali Hallaoua – Full-Stack Developers & AI Enthusiasts
 
--Project Duration: 48 hours (Hackathon Challenge)
+-Project Duration: 3 weeks (Hackathon Challenge)
 
 -Lines of Code: 2,500+ | APIs Integrated: 4 major services
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License -
 
 ## 🙏 Acknowledgments
 
